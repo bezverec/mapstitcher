@@ -18,8 +18,8 @@ services:
       - VRAM_SIZE=8.0
       - OUTPUT_FILE=stitched.jp2
     volumes:
-      - ./host_input:/data  # !adjust!
-      - ./host_output:/output  # !adjust!
+      - ../test_data/:/data  # !adjust!
+      - ../output/:/output  # !adjust!
     entrypoint: [ "/app/entrypoint_oneshot.sh" ]
     deploy:
       resources:
@@ -38,8 +38,8 @@ services:
       - VRAM_SIZE=8.0
       - OUTPUT_FILE=stitched.jp2
     volumes:
-      - ./host_input:/data  # !adjust!
-      - ./host_output:/output  # !adjust!
+      - ../test_data/:/data  # !adjust!
+      - ../output/:/output  # !adjust!
     entrypoint: [ "/app/entrypoint_service.sh" ]
     deploy:
       resources:
