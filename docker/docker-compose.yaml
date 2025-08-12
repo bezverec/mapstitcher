@@ -1,8 +1,6 @@
 # ----------------------
 # docker-compose.yml
 # ----------------------
-version: '3.8'
-
 services:
   mapstitcher:
     container_name: mapstitcher
@@ -12,7 +10,6 @@ services:
       args:
         - TAG=v0.0.1
     image: mapstitcher:latest
-    runtime: nvidia
     environment:
       - MATCHING_ALGORITHM=loftr
       - VRAM_SIZE=8.0
@@ -25,14 +22,15 @@ services:
       resources:
         reservations:
           devices:
-            - capabilities: [gpu]
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     restart: no
 
 
   mapstitcher_service:
     container_name: mapstitcher_service
     image: mapstitcher:latest
-    runtime: nvidia
     environment:
       - MATCHING_ALGORITHM=loftr
       - VRAM_SIZE=8.0
@@ -45,5 +43,7 @@ services:
       resources:
         reservations:
           devices:
-            - capabilities: [gpu]
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     restart: no
