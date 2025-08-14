@@ -5,6 +5,7 @@ import argparse
 import math
 import gc
 import subprocess
+import logging
 
 import torch
 import torch.nn.functional as F2
@@ -22,6 +23,8 @@ import matplotlib.pyplot as plt
 
 import tifffile
 
+logger = logging.getLogger(__name__)
+
 class ImageStitcher:
     def __init__(self, subsample=1.0, flow_alg='cv', vram=8.0, debug=False, silent=False):
         #self.optical_flow = OpticalFlow_RAFT()
@@ -30,6 +33,13 @@ class ImageStitcher:
         self.silent = silent
         self.flow_alg = flow_alg
         self.vram = vram
+        self.optical_flow = None
+        if flow_alg == 'raft':
+            self.optical_flow = OpticalFlow_RAFT(silent=silent)
+        elif flow_alg == 'cv':
+            self.optical_flow = OpticalFlow_CV()
+        else:
+            raise ValueError(f"Unknown flow algorithm: {flow_alg}")
 
     def find_intersection(self, corners1, corners2, img1_shape, img2_shape):
         """
@@ -204,27 +214,32 @@ class ImageStitcher:
             midpt = [isect_center[0] - isect_bb[0], isect_center[1] - isect_bb[1]]
 
             if self.flow_alg == 'raft':
-                with torch.no_grad():
-                    subsample = self.subsample_flow
-                    img1_overlap_sub = (overlap1 * 255.0).astype(np.uint8)
-                    img2_overlap_sub = (overlap2 * 255.0).astype(np.uint8)
+                try:
+                    with torch.no_grad():
+                        subsample = self.subsample_flow
+                        img1_overlap_sub = (overlap1 * 255.0).astype(np.uint8)
+                        img2_overlap_sub = (overlap2 * 255.0).astype(np.uint8)
 
-                    # subsample flow
-                    if subsample > 0.0 and subsample != 1.0:
-                        img1_overlap_sub = cv2.resize(overlap1, (int(overlap1.shape[1] / subsample), int(overlap1.shape[0] / subsample)))
-                        img2_overlap_sub = cv2.resize(overlap2, (int(overlap2.shape[1] / subsample), int(overlap2.shape[0] / subsample)))
-                    
-                    # Compute optical flow
-                    optical_flow = OpticalFlow_RAFT(silent=self.silent)
-                    orientation = 'vertical' if abs(isect_normal[0]) > abs(isect_normal[1]) else 'horizontal'
-                    flow = optical_flow.compute_optical_flow_tiled(img1_overlap_sub, img2_overlap_sub, orientation, self.vram)
-                    
-                    # upsample flow
-                    if subsample > 0.0 and subsample != 1.0:
-                        flow = cv2.resize(flow, (overlap1.shape[1], overlap1.shape[0]), interpolation=cv2.INTER_LINEAR)
-                        flow = flow * subsample
+                        # subsample flow
+                        if subsample > 0.0 and subsample != 1.0:
+                            img1_overlap_sub = cv2.resize(overlap1, (int(overlap1.shape[1] / subsample), int(overlap1.shape[0] / subsample)))
+                            img2_overlap_sub = cv2.resize(overlap2, (int(overlap2.shape[1] / subsample), int(overlap2.shape[0] / subsample)))
+                        
+                        # Compute optical flow
+                        #optical_flow = OpticalFlow_RAFT(silent=self.silent)
+                        orientation = 'vertical' if abs(isect_normal[0]) > abs(isect_normal[1]) else 'horizontal'
+                        flow = self.optical_flow.compute_optical_flow_tiled(img1_overlap_sub, img2_overlap_sub, orientation, self.vram)
+                        
+                        # upsample flow
+                        if subsample > 0.0 and subsample != 1.0:
+                            flow = cv2.resize(flow, (overlap1.shape[1], overlap1.shape[0]), interpolation=cv2.INTER_LINEAR)
+                            flow = flow * subsample
 
-                    flow = flow.transpose(2, 0, 1)
+                        flow = flow.transpose(2, 0, 1)
+                except Exception as e:
+                    logger.error(f"Error during optical flow computation: {e}")
+                    print(f"Error: {e}")
+                    raise
             else:
                 # try opencv optical flow
                 subsample = self.subsample_flow
@@ -237,8 +252,8 @@ class ImageStitcher:
                     img2_overlap_sub = cv2.resize(overlap2, (int(overlap2.shape[1] / subsample), int(overlap2.shape[0] / subsample)))
 
                 # compute flow
-                optical_flow = OpticalFlow_CV()
-                flow = optical_flow.process_images(img1_overlap_sub, img2_overlap_sub)
+                #optical_flow = OpticalFlow_CV()
+                flow = self.optical_flow.process_images(img1_overlap_sub, img2_overlap_sub)
 
                 # upsample flow
                 if subsample > 0.0 and subsample != 1.0:
@@ -439,8 +454,18 @@ if '__main__' == __name__:
     args = parse_args()
     max_matches = args.max_matches
 
+    log_name = 'result.log'
+    if args.output is not None:
+        prefix = args.output.rsplit('.', 1)[0]
+        suffix = args.output.rsplit('.', 1)[-1].lower()
+        log_name = f'{prefix}.log'
+
+    logging.basicConfig(filename=log_name, level=logging.INFO) #todo: store to output directory
+    logger.info('Started')
+
     # check if path is set or list is set
     if args.path is None and args.list is None:
+        logger.warning('No path nor file list was set.')
         raise ValueError("Either --path or --list must be set.")
 
     # if list set
@@ -463,6 +488,14 @@ if '__main__' == __name__:
         print("LOFTR Model:", args.loftr_model)
         print("Flow Algorithm:", args.flow_alg)
         print("Subsample Flow:", args.subsample_flow)
+    logger.info('Images List: %s', images)
+    logger.info('Pairs List: %s', h_pairs)
+    logger.info('Rows List: %s', rows)
+    logger.info('Optimization Model: %s', args.optimization_model)
+    logger.info('Matching Algorithm: %s', args.matching_algorithm)
+    logger.info('LOFTR Model: %s', args.loftr_model)
+    logger.info('Flow Algorithm: %s', args.flow_alg)
+    logger.info('Subsample Flow: %s', args.subsample_flow)
     
     # create list of homographies
     if args.matching_algorithm == 'loftr':
@@ -472,6 +505,7 @@ if '__main__' == __name__:
     if args.optimization_model == 'homography':
         if not args.silent:
             print("Homography size:", side_size)
+        logger.info('Homography size: %d', side_size)
         transform = make_homography_with_downscaling(**{  # Expects following argparse arguments.
             'max_size': side_size,
             'device'  : 'cuda',
@@ -481,6 +515,7 @@ if '__main__' == __name__:
     else:
         if not args.silent:
             print("Affine size:", side_size)
+        logger.info('Affine size: %d', side_size)
         transform = make_affine_transform_with_downscaling(**{  # Expects following argparse arguments.
             'max_size': side_size,
             'device'  : 'cuda',
@@ -510,6 +545,7 @@ if '__main__' == __name__:
         else:
             h_pairs.append(pair)
     print("Connected List:", connectred_list)
+    logger.info('Connected List: %s', connectred_list)
 
     for i, pair in enumerate(connectred_list):
         H_data = transform(read_image(images[pair[0]]), read_image(images[pair[1]]))
@@ -521,8 +557,10 @@ if '__main__' == __name__:
             'points': H_data[1]
         })
 
+    logger.info('Optimization start')
     optimizer = HomographyOptimizer(max_matches, args.optimization_model, silent=args.silent)
     h_optimized = optimizer.optimize(connectred_list, homographies, corresponding_points)
+    logger.info('Optimization finished')
     #h_optimized = homographies
 
     images_loaded = []
@@ -530,6 +568,7 @@ if '__main__' == __name__:
         images_loaded.append(cv2.imread(image).astype(np.float32) / 255.0)
     # create result image based on homographies
 
+    logger.info('Stitching start')
     image_stitcher = ImageStitcher(args.subsample_flow, args.flow_alg, args.vram_size, args.debug, silent=args.silent)
 
     rows_canvi = []
@@ -547,8 +586,10 @@ if '__main__' == __name__:
         H_offset = rows_offset[0]
     else:
         result_canvas, H_offset = image_stitcher.stitch_set(rows_canvi, rows_offset)
+    logger.info('Stitching finished')
 
     # save result
+    logger.info('Saving result to %s', args.output)
     if not args.silent:
         print("Saving result to", args.output)
 
@@ -579,9 +620,11 @@ if '__main__' == __name__:
         ]
 
         try:
+            logger.info('Converting to .jp2 with command: %s', ' '.join(cmd))
             subprocess.run(cmd, check=True)
             os.remove(tif_path)
         except subprocess.CalledProcessError as e:
+            logger.error(f"Error during converting: {e}")
             print(f"Error: opj_compress failed with exit code {e.returncode}")
             raise
     elif suffix == 'tif' or suffix == 'tiff':
