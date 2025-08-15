@@ -87,55 +87,45 @@ class ImageStitcher:
         return intersection, intersection_bb, intersection_center, intersection_normal
 
     def hard_border_image(self, img, point, normal):
-        height, width, _ = img.shape
-        y, x = np.meshgrid(np.arange(height).astype(np.float32), np.arange(width).astype(np.float32), indexing='ij')
-        
+        h, w = img.shape[:2]
         nx, ny = normal
         px, py = point
-        
-        mask = (nx * (x - px) + ny * (y - py)) < 0
-        mask_expanded = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
-        border_image = np.where(mask_expanded, img, 0)
-        
-        return border_image
 
-    def soft_border_image(self, img1, img2, point, normal, mask):
+        yy, xx = np.ogrid[:h, :w]
+        k = nx * px + ny * py
+        mask = (nx * xx + ny * yy) < k
+
+        return img * mask[..., None]
+
+    def soft_border_image(self, img1, img2, point, normal, overlap_mask):
         assert img1.shape == img2.shape, "Images must have the same size"
-        
-        height, width, _ = img1.shape
-        y, x = np.meshgrid(np.arange(height).astype(np.float32), np.arange(width).astype(np.float32), indexing='ij')
+        h, w = img1.shape[:2]
+        nx, ny = float(normal[0]), float(normal[1])
+        px, py = float(point[0]), float(point[1])
 
-        nx, ny = normal
-        px, py = point
-        
-        # Compute the signed distance from the line defined by the point and normal
-        signed_distance = nx * (x - px) + ny * (y - py)
-        
-        # Adjust the range of distances to smoothen the blending
-        max_abs_distance = max(np.abs(np.min(signed_distance)), np.abs(np.max(signed_distance)))
+        corners = np.array([[0,0],[w-1,0],[0,h-1],[w-1,h-1]], dtype=np.float32)
+        sd_corners = nx*(corners[:,0]-px) + ny*(corners[:,1]-py)
+        max_abs = float(np.max(np.abs(sd_corners)))
+        if max_abs < 1e-12:
+            max_abs = 1.0
 
-        # Normalize the distance to range from 0 (fully img1) to 1 (fully img2)
-        blending_mask = (0.5 * (1 + signed_distance / max_abs_distance)) * 2
-        blending_mask = np.clip(blending_mask, 0, 1)  # Ensure the mask is between 0 and 2
+        yy, xx = np.ogrid[:h, :w]
+        d = nx*(xx - px) + ny*(yy - py)  # signed distance
 
-        # Set 0 where self.mask_overlap is 0
-        blending_mask_sin = blending_mask
+        wgt = np.ones((h, w), dtype=np.float32)
+        left = d < 0
+        wgt[left] = 1.0 - np.minimum((-d[left]) * (5.0 / max_abs), 1.0)
 
-        # Identify the left side of the line (where signed_distance is negative)
-        left_side = signed_distance < 0
-        right_side = signed_distance >= 0
+        m = overlap_mask
+        if m.ndim == 3:
+            m = m[..., 0]
+        m = m.astype(np.float32)
+        wgt *= m
 
-        # Square the values of the blending mask on the left side for slower easing
-        blending_mask_sin = 1.0 - (abs(signed_distance) / max_abs_distance) * 5.0
-        blending_mask_sin[right_side] = 1
-        blending_mask_sin = np.clip(blending_mask_sin, 0, 1)
-        blending_mask_sin = blending_mask_sin * mask
-
-        blending_mask_expanded = np.repeat(blending_mask_sin[:, :, np.newaxis], 3, axis=2)
-
-        soft_image = (img1 * (1 - blending_mask_expanded) + img2 * blending_mask_expanded)
-
-        return soft_image
+        img1f = img1.astype(np.float32)
+        img2f = img2.astype(np.float32)
+        out = img1f * (1.0 - wgt)[..., None] + img2f * wgt[..., None]
+        return out.astype(img1.dtype)
 
     def stitch_set(self, images, Hs):
         min_x, min_y, max_x, max_y = math.inf, math.inf, -math.inf, -math.inf
@@ -283,7 +273,9 @@ class ImageStitcher:
         h, w, _ = img2_overlap_np.shape
         flow_np_resized = flow_np#cv2.resize(flow_np, (w, h))  # Resize flow if needed
 
-        y, x = np.meshgrid(np.arange(h).astype(np.float32), np.arange(w).astype(np.float32), indexing='ij')
+        #y, x = np.meshgrid(np.arange(h).astype(np.float32), np.arange(w).astype(np.float32), indexing='ij')
+        y = np.arange(h, dtype=np.float32)[:, None]  # shape (h,1)
+        x = np.arange(w, dtype=np.float32)[None, :]  # shape (1,w)
 
         nx, ny = intersection_normal
         px, py = point
