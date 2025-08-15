@@ -42,11 +42,14 @@ class OpticalFlow_RAFT:
         self.weights = Raft_Large_Weights.DEFAULT
         self.transforms = self.weights.transforms()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.model = raft_large(weights=self.weights)
+        self.model = self.model.eval()
+        self.model = self.model.to(self.device)
         # load the RAFT model
 
     def compute_optical_flow_tiled(self, img1, img2, orientation='horizontal', vram=8.0):
         # 1150 * 1150 per 8GB of VRAM (maybe more, but i have no means of testing)
-        maxpix = (int)(1150 * 1150 * (1.0 + (vram / 8.0 - 1.0) * 0.5)) # very rough estimate
+        maxpix = (int)(1050 * 1050 * (1.0 + (vram / 8.0 - 1.0) * 0.5)) # very rough estimate
         if orientation == 'vertical':
             patch_y = maxpix // img1.shape[1]
             patch_x = img1.shape[1]
@@ -59,10 +62,6 @@ class OpticalFlow_RAFT:
                     print(f"Processing {img1.shape[0] // (patch_y - overlap)} flow patches {patch_y} x {patch_x}")
                 for y in range(0, img1.shape[0], patch_y - overlap):
                     #print(f"Processing path {y // (patch_y - overlap)} of {img1.shape[0] // (patch_y - overlap)}")
-
-                    model = raft_large(weights=self.weights)
-                    model = model.eval()
-                    model = model.to(self.device)
 
                     # extract patches, respect image boundaries
                     img1_patch = img1[y:y+patch_y]
@@ -80,7 +79,7 @@ class OpticalFlow_RAFT:
                     img1_patch_gpu, img2_patch_gpu = padder.pad(img1_patch_gpu, img2_patch_gpu)
 
                     #print(img1_patch_gpu.shape, img2_patch_gpu.shape)
-                    flow_up_sub = model(img1_patch_gpu, img2_patch_gpu)
+                    flow_up_sub = self.model(img1_patch_gpu, img2_patch_gpu)
                     flow_up_unp_sub = padder.unpad(flow_up_sub[0])
                     flow_np = flow_up_unp_sub.squeeze(0).cpu().numpy().transpose(1, 2, 0)
 
@@ -88,7 +87,7 @@ class OpticalFlow_RAFT:
                     result[y:min(y + patch_y, img1.shape[0]), :, :] += flow_np[:min(patch_y, img1.shape[0] - y), :, :]
                     weights[y:min(y + patch_y, img1.shape[0]), :, :] += 1
 
-                    del img1_patch_gpu, img2_patch_gpu, model
+                    del img1_patch_gpu, img2_patch_gpu#, model
                     torch.cuda.empty_cache()
             
             result = result / np.maximum(weights, 1e-6)  # Avoid division by zero
@@ -106,9 +105,9 @@ class OpticalFlow_RAFT:
                 for x in range(0, img1.shape[1], patch_x - overlap):
                     #print(f"Processing path {x // (patch_x - overlap)} of {img1.shape[1] // (patch_x - overlap)}")
 
-                    model = raft_large(weights=self.weights)
-                    model = model.eval()
-                    model = model.to(self.device)
+                    #model = raft_large(weights=self.weights)
+                    #model = model.eval()
+                    #model = model.to(self.device)
 
                     # extract patches, respect image boundaries
                     img1_patch = img1[:, x:x+patch_x]
@@ -125,7 +124,7 @@ class OpticalFlow_RAFT:
                     padder = InputPadder(img1_patch_gpu.shape)
                     img1_patch_gpu, img2_patch_gpu = padder.pad(img1_patch_gpu, img2_patch_gpu)
 
-                    flow_up_sub = model(img1_patch_gpu, img2_patch_gpu)
+                    flow_up_sub = self.model(img1_patch_gpu, img2_patch_gpu)
                     flow_up_unp_sub = padder.unpad(flow_up_sub[0])
                     flow_np = flow_up_unp_sub.squeeze(0).cpu().numpy().transpose(1, 2, 0)
 
@@ -133,7 +132,7 @@ class OpticalFlow_RAFT:
                     result[:, x:min(x + patch_x, img1.shape[1]), :] += flow_np[:, :min(patch_x, img1.shape[1] - x), :]
                     weights[:, x:min(x + patch_x, img1.shape[1]), :] += 1
                     
-                    del img1_patch_gpu, img2_patch_gpu, model
+                    del img1_patch_gpu, img2_patch_gpu#, model
                     torch.cuda.empty_cache()
             
             result = result / np.maximum(weights, 1e-6)  # Avoid division by zero

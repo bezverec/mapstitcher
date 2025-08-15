@@ -188,17 +188,21 @@ class ImageStitcher:
             image2_warp = cv2.warpPerspective(img2, H2, (canvas_width, canvas_height))
 
             # get the overlapping regions
-            overlap1 = image1_warp[int(isect_bb[1]):int(isect_bb[3]), int(isect_bb[0]):int(isect_bb[2])]
-            overlap2 = image2_warp[int(isect_bb[1]):int(isect_bb[3]), int(isect_bb[0]):int(isect_bb[2])]
+            overlap1 = image1_warp[int(isect_bb[1]):int(isect_bb[3]), int(isect_bb[0]):int(isect_bb[2])].copy()
+            overlap2 = image2_warp[int(isect_bb[1]):int(isect_bb[3]), int(isect_bb[0]):int(isect_bb[2])].copy()
 
             if not image_placed[i]:
                 image1_warp = self.hard_border_image(image1_warp, isect_center, isect_normal)
                 #result_canvas = np.where(image1_warp > 0, image1_warp, result_canvas)
                 mask1 = image1_warp > 0
                 result_canvas[mask1] = image1_warp[mask1]
+                del image1_warp
+                image1_warp = None
             image2_warp = self.hard_border_image(image2_warp, isect_center, -isect_normal)
             mask2 = image2_warp > 0
             result_canvas[mask2] = image2_warp[mask2]
+            del image2_warp
+            image2_warp = None
             #result_canvas = np.where(image2_warp > 0, image2_warp, result_canvas)
 
             mask_full = np.ones((img2.shape[0], img2.shape[1]), dtype=np.float32)
@@ -257,7 +261,8 @@ class ImageStitcher:
                 flow = flow.transpose(2, 0, 1)
 
             img_mid, mask_overlap = self.remap_image_with_flow(overlap2, flow, isect_normal, midpt, mask_overlap)
-            img_mid2, mask_overlap2 = self.remap_image_with_flow(overlap1, -flow, isect_normal, midpt, mask_overlap)
+            #print("x")
+            #img_mid2, mask_overlap2 = self.remap_image_with_flow(overlap1, -flow, isect_normal, midpt, mask_overlap)
 
             # blend the images
             overlap = result_canvas[int(isect_bb[1]):int(isect_bb[3]), int(isect_bb[0]):int(isect_bb[2])]
