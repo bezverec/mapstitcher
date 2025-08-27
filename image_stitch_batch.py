@@ -7,6 +7,8 @@ import gc
 import subprocess
 import logging
 
+from pathlib import Path
+
 import torch
 import torch.nn.functional as F2
 
@@ -26,7 +28,7 @@ import tifffile
 logger = logging.getLogger(__name__)
 
 class ImageStitcher:
-    def __init__(self, subsample=1.0, flow_alg='cv', vram=8.0, debug=False, silent=False):
+    def __init__(self, subsample=1.0, flow_alg='cv', vram=8.0, debug=False, raft_weights=None, silent=False):
         #self.optical_flow = OpticalFlow_RAFT()
         self.subsample_flow = subsample
         self.debug = debug
@@ -35,7 +37,7 @@ class ImageStitcher:
         self.vram = vram
         self.optical_flow = None
         if flow_alg == 'raft':
-            self.optical_flow = OpticalFlow_RAFT(silent=silent)
+            self.optical_flow = OpticalFlow_RAFT(silent=silent, weights_path=raft_weights)
         elif flow_alg == 'cv':
             self.optical_flow = OpticalFlow_CV()
         else:
@@ -461,8 +463,19 @@ if '__main__' == __name__:
         suffix = args.output.rsplit('.', 1)[-1].lower()
         log_name = f'{prefix}.log'
 
-    logging.basicConfig(filename=log_name, level=logging.INFO) #todo: store to output directory
+    logging.basicConfig(filename=log_name, level=logging.INFO)
     logger.info('Started')
+
+    # check if weights are in weights directory
+    script_dir = Path(__file__).resolve().parent
+    loftr_path = script_dir / 'weights' / f'outdoor_ds.ckpt'
+    if args.matching_algorithm == 'loftr' and os.path.isfile(loftr_path):
+        args.loftr_model = str(loftr_path)
+
+    raft_path = script_dir / 'weights' / f'raft_large_C_T_SKHT_V2-ff5fadd5.pth'
+    raft_weights_path = None
+    if args.flow_alg == 'raft' and os.path.isfile(raft_path):
+        raft_weights_path = str(raft_path)
 
     # check if path is set or list is set
     if args.path is None and args.list is None:
@@ -570,7 +583,7 @@ if '__main__' == __name__:
     # create result image based on homographies
 
     logger.info('Stitching start')
-    image_stitcher = ImageStitcher(args.subsample_flow, args.flow_alg, args.vram_size, args.debug, silent=args.silent)
+    image_stitcher = ImageStitcher(args.subsample_flow, args.flow_alg, args.vram_size, args.debug, raft_weights=raft_weights_path, silent=args.silent)
 
     rows_canvi = []
     rows_offset = []
@@ -604,7 +617,15 @@ if '__main__' == __name__:
         #cv2.imwrite(tif_path, (result_canvas * 255.0).astype(np.uint8))
         # 
         rgb_image = cv2.cvtColor((result_canvas * 255.0).astype(np.uint8), cv2.COLOR_BGR2RGB)
-        tifffile.imwrite(tif_path, rgb_image, bigtiff=True)
+
+        extratags = [
+            # tag, dtype, count, value, writeonce
+            (305, 's', 1, "Processed by Mapstitcher", True),   # 305 Software
+        ]
+
+        tifffile.imwrite(tif_path, rgb_image, bigtiff=True, resolution=(300.0, 300.0), 
+            extratags=extratags, 
+            metadata={'ProcessedBy': 'Mapstitcher', 'Comment': 'Stitched panorama'})
 
         cmd = [
             'opj_compress',
@@ -630,6 +651,13 @@ if '__main__' == __name__:
             raise
     elif suffix == 'tif' or suffix == 'tiff':
         rgb_image = cv2.cvtColor((result_canvas * 255.0).astype(np.uint8), cv2.COLOR_BGR2RGB)
-        tifffile.imwrite(args.output, rgb_image, bigtiff=True)
+        extratags = [
+            # tag, dtype, count, value, writeonce
+            (305, 's', 1, "Processed by Mapstitcher", True),   # 305 Software
+        ]
+
+        tifffile.imwrite(args.output, rgb_image, bigtiff=True, resolution=(300.0, 300.0), 
+            extratags=extratags, 
+            metadata={'ProcessedBy': 'Mapstitcher', 'Comment': 'Stitched panorama'})
     else:
         cv2.imwrite(args.output, (result_canvas * 255.0).astype(np.uint8))

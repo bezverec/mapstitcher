@@ -32,17 +32,27 @@ class InputPadder:
         return x[..., c[0]:c[1], c[2]:c[3]]
 
 class OpticalFlow_RAFT:
-    def __init__(self, debug=False, silent=False):
+    def __init__(self, debug=False, silent=False, weights_path=None):
         """
         Initializes the OpticalFlow_RAFT class.
         """
 
         self.silent = silent
         self.debug = debug
-        self.weights = Raft_Large_Weights.DEFAULT
+        if weights_path is not None:
+            print("Loading RAFT weights from", weights_path)
+            self.weights = Raft_Large_Weights.DEFAULT
+            self.weights._url = None
+            self.weights._meta = None
+            self.weights._weights_path = weights_path
+            if not self.silent:
+                print(f"Using RAFT weights from {weights_path}")
+        else:
+            self.weights = Raft_Large_Weights.DEFAULT
+
+        self.model = raft_large(weights=self.weights)
         self.transforms = self.weights.transforms()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.model = raft_large(weights=self.weights)
         self.model = self.model.eval()
         self.model = self.model.to(self.device)
         # load the RAFT model

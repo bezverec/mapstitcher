@@ -33,7 +33,14 @@ import torch
 def make_correspondences(device, model='outdoor', algorithm='loftr', debug=False):
     if algorithm == 'loftr':
         from kornia.feature import LoFTR
-        loftr = LoFTR(pretrained=model).to(device)
+        if ".ckpt" in model: 
+            print("Loading LoFTR from checkpoint:", model)
+            loftr = LoFTR(pretrained=None)
+            checkpoint = torch.load(model, map_location=device, weights_only=True)
+            loftr.load_state_dict(checkpoint['state_dict'])
+            loftr = loftr.to(device)
+        else:
+            loftr = LoFTR(pretrained=model).to(device)
         loftr.eval()
     
     def correspondences_loftr(image0, image1):
