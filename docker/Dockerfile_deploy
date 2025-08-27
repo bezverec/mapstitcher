@@ -2,8 +2,8 @@ FROM node:18 as git_stage
 
 WORKDIR /app
 RUN apt-get update && apt-get install -y git && apt-get purge -y --auto-remove  && rm -rf /var/lib/apt/lists/*
-ARG GIT_TAG="v1.0.1"
-RUN git clone --branch v1.0.1 --single-branch https://github.com/DCGM/mapstitcher.git
+ARG GIT_TAG="v1.0.2"
+RUN git clone --branch v1.0.2 --single-branch https://github.com/DCGM/mapstitcher.git
 RUN wget https://github.com/DCGM/mapstitcher/releases/download/v1.0.0/outdoor_ds.ckpt && mkdir -p weights && mv outdoor_ds.ckpt weights/
 RUN wget https://download.pytorch.org/models/raft_large_C_T_SKHT_V2-ff5fadd5.pth && mkdir -p weights && mv raft_large_C_T_SKHT_V2-ff5fadd5.pth weights/
 
