@@ -2,11 +2,15 @@ FROM node:18 as git_stage
 
 WORKDIR /app
 RUN apt-get update && apt-get install -y git && apt-get purge -y --auto-remove  && rm -rf /var/lib/apt/lists/*
-ARG GIT_TAG="v1.0.2"
-RUN git clone --branch v1.0.2 --single-branch https://github.com/DCGM/mapstitcher.git
-RUN wget https://github.com/DCGM/mapstitcher/releases/download/v1.0.0/outdoor_ds.ckpt && mkdir -p weights && mv outdoor_ds.ckpt weights/
-RUN wget https://download.pytorch.org/models/raft_large_C_T_SKHT_V2-ff5fadd5.pth && mkdir -p weights && mv raft_large_C_T_SKHT_V2-ff5fadd5.pth weights/
-
+RUN apt-get update && apt-get install -y --no-install-recommends wget \
+    && rm -rf /var/lib/apt/lists/*
+ARG GIT_TAG="v1.0.3"
+RUN git clone --branch v1.0.3 --single-branch https://github.com/DCGM/mapstitcher.git mapstitcher
+# download weights into the dir
+WORKDIR /app/mapstitcher
+RUN mkdir -p weights && \
+    wget -O weights/outdoor_ds.ckpt https://github.com/DCGM/mapstitcher/releases/download/v1.0.0/outdoor_ds.ckpt && \
+    wget -O weights/raft_large_C_T_SKHT_V2-ff5fadd5.pth https://github.com/DCGM/mapstitcher/releases/download/v1.0.0/raft_large_C_T_SKHT_V2-ff5fadd5.pth
 ########################################################################################
 
 FROM python:3.10-slim
@@ -29,7 +33,8 @@ WORKDIR /app/mapstitcher
 COPY --from=git_stage app/mapstitcher/requirements.txt ./requirements.txt
 RUN pip install -r requirements.txt
 
-COPY --from=git_stage app/mapstitcher ./
+COPY --from=git_stage /app/mapstitcher ./
+
 COPY entrypoint_oneshot.sh /app/entrypoint_oneshot.sh
 COPY entrypoint_service.sh /app/entrypoint_service.sh
 RUN chmod +x /app/entrypoint_oneshot.sh /app/entrypoint_service.sh

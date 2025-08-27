@@ -41,17 +41,15 @@ class OpticalFlow_RAFT:
         self.debug = debug
         if weights_path is not None:
             print("Loading RAFT weights from", weights_path)
-            self.weights = Raft_Large_Weights.DEFAULT
-            self.weights._url = None
-            self.weights._meta = None
-            self.weights._weights_path = weights_path
-            if not self.silent:
-                print(f"Using RAFT weights from {weights_path}")
+            state_dict = torch.load(weights_path, map_location='cuda' if torch.cuda.is_available() else 'cpu', weights_only=True)
+            self.model = raft_large(weights=None)
+            self.model.load_state_dict(state_dict)
+            self.transforms = Raft_Large_Weights.DEFAULT.transforms()
         else:
             self.weights = Raft_Large_Weights.DEFAULT
+            self.model = raft_large(weights=self.weights)
+            self.transforms = self.weights.transforms()
 
-        self.model = raft_large(weights=self.weights)
-        self.transforms = self.weights.transforms()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model = self.model.eval()
         self.model = self.model.to(self.device)
