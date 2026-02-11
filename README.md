@@ -2,6 +2,8 @@
 
 This is a fork.
 
+<img width="982" height="1070" alt="mapstitcher_gui" src="https://github.com/user-attachments/assets/2e3670b7-c11c-4521-b03e-1248ea715724" />
+
 ## Installation
 
 ### Prerequisites
