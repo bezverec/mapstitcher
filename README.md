@@ -31,6 +31,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\venv\Scripts\Activate.ps1
 python -m pip install -U pip
 pip install -r requirements.txt
+pip install -r requirements-cu130.txt
 ```
 
 #### Linux/macOS
@@ -40,6 +41,7 @@ python3 -m venv venv
 source venv/bin/activate
 python -m pip install -U pip
 pip install -r requirements.txt
+pip install -r requirements-cu130.txt
 ```
 
 ---
