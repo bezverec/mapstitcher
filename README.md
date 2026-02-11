@@ -11,7 +11,7 @@ This is a fork.
 - For GPU (LoFTR/RAFT): NVIDIA GPU + up-to-date driver
 - For CPU-only usage: use `--matching-algorithm sift`
 
-> Note: `requirements.txt` installs PyTorch nightly CUDA wheels (`cu130`) via `--index-url`.
+> Note: `requirements-cu130.txt` installs PyTorch nightly CUDA wheels (`cu130`) via `--index-url`.
 > If CUDA wheels cannot be downloaded/installed, use CPU PyTorch and/or switch to SIFT.
 
 ---
