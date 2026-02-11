@@ -68,6 +68,7 @@ Activate the same venv you installed dependencies into, then run the GUI script.
 
 #### Windows
 ```powershell
+cd C:\path\to\mapstitcher
 .\venv\Scripts\Activate.ps1
 python mapstitcher_gui.py
 ```
