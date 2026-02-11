@@ -82,7 +82,7 @@ python mapstitcher_gui.py
 #### Linux/macOS
 ```bash
 source venv/bin/activate
-python3 mapstitcher_gui.py
+python mapstitcher_gui.py
 ```
 
 ---
